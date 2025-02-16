@@ -31,10 +31,8 @@ use winit::{
     event::{ElementState, MouseButton},
     event_loop::EventLoop,
     keyboard::PhysicalKey,
-    /*platform::macos::WindowAttributesExtMacOS,*/
-    window::{Window as WinitWindow, WindowAttributes}, //, WindowBuilder
+    window::{Window as WinitWindow, WindowAttributes},
 };
-//use winit::application::ApplicationHandler;
 pub mod colors;
 pub mod ui;
 #[repr(C)]
@@ -45,6 +43,7 @@ struct Vertex {
 }
 unsafe impl bytemuck::Pod for Vertex {}
 unsafe impl bytemuck::Zeroable for Vertex {}
+/// These are the vertices that occupy the whole screen
 const VERTICES: &[Vertex] = &[
     // tri 1
     Vertex {
@@ -72,7 +71,8 @@ const VERTICES: &[Vertex] = &[
         position: [1., 1., 0.],
         uv: [1., 1. - 1.],
     },
-]; //&//&
+];
+/// These are the vertices for individual floating letters
 const VERTICES_I: &[Vertex] = &[
     // tri 1
     Vertex {
@@ -100,7 +100,8 @@ const VERTICES_I: &[Vertex] = &[
         position: [1., 1., 0.],
         uv: [1., 1. - 1.],
     },
-]; //&//&
+];
+// This is the layout of the screen vertices, I mostly copy-pasted it from the wgpu tutorial
 const VERTEX_LAYOUT: wgpu::VertexBufferLayout = /* more copy-pasting :3 */
     wgpu::VertexBufferLayout {
         array_stride: std::mem::size_of::<Vertex>() as wgpu::BufferAddress, // 1.
@@ -138,43 +139,28 @@ impl Default for Font {
                                                                 //todo!()//Path//.to_owned()//terminal8x8
     }
 }
-/*
-pub struct Instance<'a,T:Game>{
-    game:T,
-    main_window:Window<'a>
-}
- */
 /// The window type, with which you do rendering with
 pub struct Window<'a> {
+    // Winit's window, I probably could have had messed with lifetimes to make it work (it needs to be dropped after everything that depends on it) but I instead choose to just `Box::leak` it.
     window: &'static WinitWindow,
+    // All these parameters are explained in the new_inner function
     surface: wgpu::Surface<'a>,
     device: wgpu::Device,
     queue: wgpu::Queue,
     char_width: u32,
     char_height: u32,
-    //config: wgpu::SurfaceConfiguration,
-    //size: winit::dpi::Size,
-    //text_texture: wgpu::Texture,
     buffer_colors_fg: Vec<u8>,
     buffer_colors_bg: Vec<u8>,
     buffer_chars: Vec<u8>,
     set_buffer: Vec<u8>,
     set_texture: wgpu::Texture,
     render_pipeline: wgpu::RenderPipeline,
-    //sampler: wgpu::Sampler,
-    //texture_view: wgpu::TextureView,
     bind_group: wgpu::BindGroup,
     vertex_buffer: wgpu::Buffer,
     char_grid_texture: wgpu::Texture,
-    //char_grid_view: wgpu::TextureView,
-    //fg_view: wgpu::TextureView,
     fg_texture: wgpu::Texture,
-    //bg_view: wgpu::TextureView,
     bg_texture: wgpu::Texture,
     background_color: (u8, u8, u8, u8),
-    // game: T, //buffer_colors_fg:Vec<u8>,
-    //buffer_colors_bg:Vec<u8>,
-    //buffer_chars:Vec<u8>
     config_chargrid: Config,
     dirty: bool,
     char_grid_size: wgpu::Extent3d,
@@ -193,38 +179,31 @@ impl<'a> Window<'a> {
         window: &'static WinitWindow,
         images: &Vec<DynamicImage>,
     ) -> Self {
-        // save the padding here
+        // save the padding here (define an alias)
         let padding = config.padding;
+        // create the buffers's vecs that we will keep CPU-side and modify, then send to the GPU each frame
         let buffer_colors_fg = vec![0; (config.size.0 * config.size.1) as usize * 4];
         let buffer_colors_bg = vec![0; (config.size.0 * config.size.1) as usize * 4];
         let set_buffer = vec![0; (config.size.0 * config.size.1) as usize];
         let buffer_chars = vec![0; (config.size.0 * config.size.1) as usize];
+        // define more aliases!
         let background_color = config.background_color;
+        // Calculate the size of chars based on the assumption that the fonts are 256-character grids following cp437 encoding
         let char_width = images[0].width() / 16;
         let char_height = images[0].height() / 16;
-        //let k=&"Hello World! I am in great pain :(";
+        // define more aliases
         let cg_width = config.size.0;
         let cg_height = config.size.1;
-        // calculate padding
+        // calculate padding (this is magic math I could have had figured out properly but I instead fiddled with it till it worked).
         let size_x = (size.width - config.padding.0 * config.scale.0) as f32 / (size.width) as f32;
         let size_y =
-            (size.height - config.padding.1 * config.scale.1) as f32 / (size.height) as f32; //size.height/config.scale.1//.size
-                                                                                             /*   for m in 0..cg_height as usize/2{// *2//20//-//0//0//width
-                                                                                             for k in k.chars().into_iter().enumerate(){//+1*cg_width as usize
-                                                                                                 buffer_chars[k.0+m*cg_width as usize*2]=k.1 as u8;// *2//+m*2//+m
-                                                                                                 let index=(k.0+m*cg_width as usize*2)*4;
-                                                                                                 buffer_colors_fg[index+3]=255;
-                                                                                                 buffer_colors_fg[index]=255;
-                                                                                                 buffer_colors_fg[index+1]=k.0 as u8+m as u8;
-                                                                                                 buffer_colors_fg[index+2]=k.0 as u8+m as u8;
-                                                                                                 buffer_colors_bg[index+3]=255;
-                                                                                                 buffer_colors_bg[index]=0;
-                                                                                                 buffer_colors_bg[index+1]=255-(k.0 as u8+m as u8)*4;
-                                                                                                 buffer_colors_bg[index+2]=255-(k.0 as u8+m as u8)*4;
-                                                                                             }
-                                                                                              }*/
+            (size.height - config.padding.1 * config.scale.1) as f32 / (size.height) as f32;
+
+        // define more aliases
         let config_chargrid = config;
         let max_instances = config_chargrid.max_instances;
+
+        // my instance configuration is mainly for wasm32 support
         let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
             #[cfg(not(target_arch = "wasm32"))]
             backends: wgpu::Backends::PRIMARY,
@@ -233,7 +212,9 @@ impl<'a> Window<'a> {
 
             ..Default::default()
         });
+        // create the surface 
         let surface = instance.create_surface(window).unwrap();
+        // create the adapter
         let adapter = instance
             .request_adapter(&wgpu::RequestAdapterOptions {
                 power_preference: wgpu::PowerPreference::None,
@@ -242,15 +223,18 @@ impl<'a> Window<'a> {
             })
             .await
             .unwrap();
+        // create the device and the queue; we will use the device when creating ressources and the queue when issuing orders
         let (device, queue) = adapter
             .request_device(
                 &wgpu::DeviceDescriptor {
                     required_features: wgpu::Features::empty(),
+                    // note more wasm32 things
                     required_limits: if cfg!(target_arch = "wasm32") {
                         wgpu::Limits::downlevel_webgl2_defaults()
                     } else {
                         wgpu::Limits::default()
                     },
+                    // Mostly useful for debugging
                     label: Some("device"),
                     memory_hints: wgpu::MemoryHints::default(),
                 },
@@ -262,16 +246,19 @@ impl<'a> Window<'a> {
         let surface_caps = surface.get_capabilities(&adapter);
         let surface_format = surface_caps
             .formats
-            .iter() //.is_srgb()
+            .iter() 
             .find(|f| {
+                // sRGB changes how colors are scaled, which makes low RGB values brighter
                 if config_chargrid.srgb {
-                    !!f.is_srgb()
+                    f.is_srgb()
                 } else {
                     !f.is_srgb()
                 }
-            }) // !
+            })
             .copied()
+            // in case we didn't find anything that worked, we rely on the first element
             .unwrap_or(surface_caps.formats[0]);
+        // render surface's config
         let config = wgpu::SurfaceConfiguration {
             usage: TextureUsages::RENDER_ATTACHMENT,
             format: surface_format,
@@ -282,56 +269,65 @@ impl<'a> Window<'a> {
             view_formats: vec![],
             desired_maximum_frame_latency: 2,
         };
+        // we convert all our font images to rgba8
         let images_rgba8: Vec<ImageBuffer<Rgba<u8>, Vec<u8>>> =
             images.iter().map(|f| f.to_rgba8()).collect();
+        // we get the dimension of the first one (all font images must be the same size since I am using an array)
         let dimensions = images_rgba8[0].dimensions();
+        // texture size of the font images on the GPU
         let texture_size = wgpu::Extent3d {
             width: dimensions.0,
             height: dimensions.1,
-            depth_or_array_layers: images_rgba8.len() as u32, //1
+            // note the array layers
+            depth_or_array_layers: images_rgba8.len() as u32,
         };
+        // creates the GPU-side texture
         let wgpu_side_texture = device.create_texture(&wgpu::TextureDescriptor {
             size: texture_size,
             mip_level_count: 1,
             sample_count: 1,
-            dimension: wgpu::TextureDimension::D2, //2//3
+            dimension: wgpu::TextureDimension::D2, 
+            // Format matches image format
             format: wgpu::TextureFormat::Rgba8UnormSrgb,
-            usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST, //| wgpu::TextureUsages::A
+            // Copy DST is important since we dont actually create it with content
+            usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
             label: Some("text texture"),
             view_formats: &[],
         });
+        // The size of the chargrid that covers the whole screen (except the padding)
         let char_grid_size = wgpu::Extent3d {
             width: cg_width,
             height: cg_height,
             depth_or_array_layers: 01,
         };
+        // We create its texture
         let char_grid_texture = device.create_texture(&wgpu::TextureDescriptor {
-            size: char_grid_size, //texture_size,
+            size: char_grid_size, 
             mip_level_count: 1,
             sample_count: 1,
-            dimension: wgpu::TextureDimension::D2, //A
+            dimension: wgpu::TextureDimension::D2, 
+            // It's a texture of single bytes, thus R8Unorm, which provides us with f32s scaled from 0. to 1. on the shader side
             format: wgpu::TextureFormat::R8Unorm,
             usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
             label: Some("text grid texture"),
             view_formats: &[],
         });
-        /*let _fg_size = wgpu::Extent3d {
-            width: cg_width,
-            height: cg_height,
-            depth_or_array_layers: 01,
-        };*/
+        // creates the texture which stores foreground colors for each grid character
         let fg_texture = device.create_texture(&wgpu::TextureDescriptor {
-            size: char_grid_size, //texture_size,
+            size: char_grid_size, 
             mip_level_count: 1,
             sample_count: 1,
             dimension: wgpu::TextureDimension::D2,
+            // note the format
             format: wgpu::TextureFormat::Rgba8Unorm,
             usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
             label: Some("text fg texture"),
             view_formats: &[],
         });
+        // creates the texture which stores background colors for each grid character
+
         let bg_texture = device.create_texture(&wgpu::TextureDescriptor {
-            size: char_grid_size, //texture_size,
+            size: char_grid_size,
             mip_level_count: 1,
             sample_count: 1,
             dimension: wgpu::TextureDimension::D2,
@@ -340,17 +336,20 @@ impl<'a> Window<'a> {
             label: Some("text bg texture"),
             view_formats: &[],
         });
+        // creates the texture which stores which font each character uses
+        // it is used in the shader to index into the font texture array
         let set_texture = device.create_texture(&wgpu::TextureDescriptor {
-            //bg
-            size: char_grid_size, //texture_size,
+            size: char_grid_size, 
             mip_level_count: 1,
             sample_count: 1,
             dimension: wgpu::TextureDimension::D2,
-            format: wgpu::TextureFormat::R8Unorm, //gba
+            // note that this gives us a limitation of 256 font files
+            format: wgpu::TextureFormat::R8Unorm, 
             usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
-            label: Some("text set texture"), //bg
+            label: Some("text set texture"),
             view_formats: &[],
         });
+        // Generic pixel perfect sampler that clamps to the border
         let texture_sampler = device.create_sampler(&wgpu::SamplerDescriptor {
             address_mode_u: wgpu::AddressMode::ClampToEdge,
             address_mode_v: wgpu::AddressMode::ClampToEdge,
@@ -360,20 +359,24 @@ impl<'a> Window<'a> {
             mipmap_filter: wgpu::FilterMode::Nearest,
             ..Default::default()
         });
+        // view for the text texture, it is provided to the pipeline when it renders
         let view = wgpu_side_texture.create_view(&wgpu::TextureViewDescriptor {
             dimension: Some(wgpu::TextureViewDimension::D2Array),
-            ..Default::default() //::default()
+            ..Default::default()
         });
+        // create other views
         let view_char_grid = char_grid_texture.create_view(&wgpu::TextureViewDescriptor::default());
         let fg_view = fg_texture.create_view(&wgpu::TextureViewDescriptor::default());
         let bg_view = bg_texture.create_view(&wgpu::TextureViewDescriptor::default());
         let set_view = set_texture.create_view(&wgpu::TextureViewDescriptor::default()); //bg//bg
         for i in images_rgba8.iter().enumerate() {
+            // ensure images are the same size
             assert_eq!(
                 dimensions,
                 i.1.dimensions(),
                 "images must have the same size, sadly :("
             );
+            // writes the font texture to the array
             queue.write_texture(
                 wgpu::ImageCopyTextureBase {
                     texture: &wgpu_side_texture,
@@ -381,11 +384,12 @@ impl<'a> Window<'a> {
                     origin: wgpu::Origin3d {
                         x: 0,
                         y: 0,
+                        // note the z-offset
                         z: i.0 as u32,
-                    }, //i32//wgpu::Origin3d::ZERO+
+                    }, 
                     aspect: wgpu::TextureAspect::All,
                 },
-                &i.1, //image_rgba8
+                &i.1, 
                 wgpu::ImageDataLayout {
                     offset: 0,
                     bytes_per_row: Some(4 * dimensions.0),
@@ -395,10 +399,11 @@ impl<'a> Window<'a> {
                     width: texture_size.width,
                     height: texture_size.height,
                     depth_or_array_layers: 1,
-                }, //()
+                },
             );
         }
-
+        // writes the textures with the stored buffers
+        // first, which char the grid uses
         queue.write_texture(
             wgpu::ImageCopyTextureBase {
                 texture: &char_grid_texture,
@@ -414,6 +419,7 @@ impl<'a> Window<'a> {
             },
             char_grid_size,
         );
+        // second, the foreground color
         queue.write_texture(
             wgpu::ImageCopyTextureBase {
                 texture: &fg_texture,
@@ -429,6 +435,7 @@ impl<'a> Window<'a> {
             },
             char_grid_size,
         );
+        // third, the background color
         queue.write_texture(
             wgpu::ImageCopyTextureBase {
                 texture: &bg_texture,
@@ -444,8 +451,12 @@ impl<'a> Window<'a> {
             },
             char_grid_size,
         );
-        let shader = include_str!("text_shader.wglsl"); //as f32//width
+        // includes the shaders, first the chargrid shader
+        let shader = include_str!("text_shader.wglsl");
+        // then the floating characters/instances shader
         let mut shader_instance = include_str!("instance_shader.wglsl").to_owned();
+        // I could have went with constants but I instead just pre-filtered the shaders
+        // This is bad practice, but it Just Works
         shader_instance = shader_instance.replace("$SC_WIDTH", format!("{}", size.width).as_str());
         shader_instance =
             shader_instance.replace("$SC_HEIGHT", format!("{}", size.height).as_str());
@@ -464,13 +475,11 @@ impl<'a> Window<'a> {
         let mut shader = shader.replace(
             "$SCALE_FACTOR_X",
             format!("f32({})", dimensions.0 as f32).as_str(),
-        ); //width///16 as f32///16//cg_width as f32/ (cg_height as f32)
+        ); 
         shader = shader.replace(
             "$SCALE_FACTOR_Y",
             format!(
                 "f32({})",
-                /*size.height as f32/ (dimensions.1) as f32*/
-                cg_width as f32 / (cg_height as f32)
             )
             .as_str(),
         );
@@ -478,8 +487,7 @@ impl<'a> Window<'a> {
             "$CHARGRID",
             format!("vec2<f32>(f32({}),f32({}))", cg_width, cg_height).as_str(),
         );
-        //println!("{shader}");
-        //println!("SIN");
+        // loads the shaders into WGPU
         let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("text shader"),
             source: wgpu::ShaderSource::Wgsl(shader.into()),
@@ -488,10 +496,10 @@ impl<'a> Window<'a> {
             label: Some("instance shader"),
             source: wgpu::ShaderSource::Wgsl(shader_instance.into()),
         });
-        //println!("SOUT");
+        // Here, I copied more things from the wgpu tutorial; each of these bindings echo textures & samplers from the shaders
         let texture_bind_group_layout =
             device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-                // nooo i didnt copy paste anythiiing
+                // nooo i didnt copy paste anythiiing <- this is a lie
                 entries: &[
                     wgpu::BindGroupLayoutEntry {
                         binding: 0,
@@ -546,19 +554,21 @@ impl<'a> Window<'a> {
                         visibility: wgpu::ShaderStages::FRAGMENT,
                         ty: wgpu::BindingType::Texture {
                             multisampled: false,
-                            view_dimension: wgpu::TextureViewDimension::D2, //Uint//=
-                            sample_type: wgpu::TextureSampleType::Float { filterable: true }, //Float { filterable: true }//Depth
+                            view_dimension: wgpu::TextureViewDimension::D2, 
+                            sample_type: wgpu::TextureSampleType::Float { filterable: true },
                         },
                         count: None,
                     },
                 ],
                 label: Some("text rendering bind group layout"),
             });
+        // creates the bind group with the layout we just provided
         let texture_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
             layout: &texture_bind_group_layout,
             entries: &[
                 wgpu::BindGroupEntry {
                     binding: 0,
+                    // here we actually point it to what we want it to be in the shaders
                     resource: wgpu::BindingResource::TextureView(&view),
                 },
                 wgpu::BindGroupEntry {
@@ -578,33 +588,38 @@ impl<'a> Window<'a> {
                     resource: wgpu::BindingResource::TextureView(&bg_view),
                 },
                 wgpu::BindGroupEntry {
-                    binding: 5,                                              //4
-                    resource: wgpu::BindingResource::TextureView(&set_view), //bg_view
+                    binding: 5,                                             
+                    resource: wgpu::BindingResource::TextureView(&set_view), 
                 },
             ],
             label: Some("text rendering bind group"),
         });
+        // we specify with the texture bind group layout our render pipeline layout
         let render_pipeline_layout =
             device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
                 label: Some("text render pipeline layout"),
                 bind_group_layouts: &[&texture_bind_group_layout],
                 push_constant_ranges: &[],
             });
+        // the render pipeline is a vital part of WGPU rendering
         let render_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
             label: Some("text render pipeline"),
             layout: Some(&render_pipeline_layout),
             vertex: wgpu::VertexState {
+                // specify the shader
                 module: &shader,
                 entry_point: Some("vs_main"),
                 buffers: &[VERTEX_LAYOUT],
                 compilation_options: wgpu::PipelineCompilationOptions::default(),
             },
             fragment: Some(wgpu::FragmentState {
+                // also specify the shader
                 module: &shader,
                 entry_point: Some("fs_main"),
                 compilation_options: wgpu::PipelineCompilationOptions::default(),
                 targets: &[Some(wgpu::ColorTargetState {
                     format: config.format,
+                    // blendstates are useful here to blend the config's background color with the color of the chargrid
                     blend: Some(wgpu::BlendState {
                         color: wgpu::BlendComponent {
                             src_factor: wgpu::BlendFactor::SrcAlpha,
@@ -612,7 +627,7 @@ impl<'a> Window<'a> {
                             operation: wgpu::BlendOperation::Add,
                         },
                         alpha: wgpu::BlendComponent::OVER,
-                    }), //REPLACE
+                    }),
                     write_mask: wgpu::ColorWrites::ALL,
                 })],
             }),
@@ -625,6 +640,7 @@ impl<'a> Window<'a> {
                 polygon_mode: wgpu::PolygonMode::Fill,
                 conservative: false,
             },
+            // no depth
             depth_stencil: None,
             multiview: None,
             multisample: wgpu::MultisampleState {
@@ -634,17 +650,22 @@ impl<'a> Window<'a> {
             },
             cache: None,
         });
+        // this is the render pipeline that renders floating characters / instances
         let instance_render_pipeline =
             device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
                 label: Some("text instances render pipeline"),
+                // it uses the same layout
                 layout: Some(&render_pipeline_layout),
                 vertex: wgpu::VertexState {
+                    // but not the same shader
                     module: &instance_shader,
                     entry_point: Some("vs_main"),
+                    // and it has an extra buffer
                     buffers: &[VERTEX_LAYOUT, INSTANCE_LAYOUT],
                     compilation_options: wgpu::PipelineCompilationOptions::default(),
                 },
                 fragment: Some(wgpu::FragmentState {
+                    // apart from the shader, the fragment uses the same configuration
                     module: &instance_shader,
                     entry_point: Some("fs_main"),
                     compilation_options: wgpu::PipelineCompilationOptions::default(),
@@ -657,7 +678,7 @@ impl<'a> Window<'a> {
                                 operation: wgpu::BlendOperation::Add,
                             },
                             alpha: wgpu::BlendComponent::OVER,
-                        }), //REPLACE
+                        }), 
                         write_mask: wgpu::ColorWrites::ALL,
                     })],
                 }),
@@ -670,6 +691,7 @@ impl<'a> Window<'a> {
                     polygon_mode: wgpu::PolygonMode::Fill,
                     conservative: false,
                 },
+                // still no depth testing
                 depth_stencil: None,
                 multiview: None,
                 multisample: wgpu::MultisampleState {
@@ -678,8 +700,11 @@ impl<'a> Window<'a> {
                     alpha_to_coverage_enabled: false,
                 },
                 cache: None,
-            });
+        });
+        
+        // configure the surface
         surface.configure(&device, &config);
+        // creates the vertex buffer for the triangles that cover the screen (note that we also do some math here to ensure padding works)
         let vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("vertex buffer"),
             contents: bytemuck::cast_slice(
@@ -691,6 +716,7 @@ impl<'a> Window<'a> {
                             position: [
                                 f.position[0] * size_x,
                                 f.position[1] * size_y,
+                                // we don't care about z-position
                                 f.position[2],
                             ],
                             uv: [f.uv[0], f.uv[1]],
@@ -698,47 +724,46 @@ impl<'a> Window<'a> {
                     })
                     .collect::<Vec<Vertex>>(),
             ),
+            // we will not write to it, so it doesn't need `COPY_DST`
             usage: wgpu::BufferUsages::VERTEX,
         });
+        // this is the CPU-side buffer of instances/floating characters
         let instances = vec![InstanceData::zeroed(); max_instances as usize];
+        // we create its buffer
         let instance_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("instance buffer"),
             contents: bytemuck::cast_slice(&instances),
+            // note that in wgpu, instances use `BufferUsages::VERTEX`
             usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::VERTEX,
         });
+        // we create the buffer that contains the vertices
         let instance_vertices = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("instance vertice buffer"),
             contents: bytemuck::cast_slice(&VERTICES_I),
             usage: wgpu::BufferUsages::VERTEX,
         });
+        // we create the variable that contains our instance count (the amount of instances that currently have values)
         let instance_count = 0;
+        // we return the completed window
         Self {
-            window, //: window,
+            window, 
             surface,
             device,
             queue,
             instances,
             instance_count,
             instance_buffer,
-            //config,
-            //size: size.into(),
-            text_texture: wgpu_side_texture, // //
+            text_texture: wgpu_side_texture,
             buffer_colors_bg,
             buffer_colors_fg,
             buffer_chars,
             render_pipeline,
-            //texture_view: view,
-            //sampler: texture_sampler,
             bind_group: texture_bind_group,
             vertex_buffer,
-            //char_grid_view: view_char_grid,
             char_grid_texture,
-            //fg_view,
-            //bg_view,
             fg_texture,
             bg_texture,
             background_color,
-            //game: t,
             config_chargrid,
             dirty: false,
             char_grid_size,
@@ -757,20 +782,16 @@ impl<'a> Window<'a> {
     where
         T: Yarl2Game,
     {
-        //Self
-        // let config = Config::de
-        assert!(config.font.len() > 0, "must have at least one font");
-
+        // extracts the images of the config
         let images: Vec<DynamicImage> = config
             .font
             .iter()
             .map(|f| {
-                //for_each
                 match f {
-                    //match &config.font[0]
                     Font::Image(k) => k.clone(),
                     Font::Binary(bin) => {
-                        image::ImageReader::new(std::io::Cursor::new(bin)) //,format
+                        image::ImageReader::new(std::io::Cursor::new(bin))
+                            // with guessed format is important, otherwise `image` wont load those unspecified-format slices of bytes
                             .with_guessed_format()
                             .unwrap()
                             .decode()
@@ -778,36 +799,42 @@ impl<'a> Window<'a> {
                     }
                     Font::Path(path) => image::ImageReader::open(path)
                         .unwrap()
+                        // it is still important
                         .with_guessed_format()
                         .unwrap()
                         .decode()
                         .unwrap(),
-                } //;
+                }
             })
             .collect();
+        // does more math we will re-do later to calculate the window size
         let char_width = images[0].width() / 16;
         let char_height = images[0].height() / 16;
         let pixel_size = (
-            config.size.0 * char_width,  //8 / 8
-            config.size.1 * char_height, //8 / 8//* // *
+            config.size.0 * char_width,  
+            config.size.1 * char_height, 
         );
-        let event_loop = EventLoop::new().unwrap(); //LogicalSize
+        let event_loop = EventLoop::new().unwrap(); 
+        // PhysicalSize is in screen pixels, so it should more or less ignore DPI (except on the web, where it does *magic*)
         let size = PhysicalSize::new(
             (pixel_size.0 + config.padding.0) * config.scale.0,
             (pixel_size.1 + config.padding.1) * config.scale.1,
-        ); //resizable
-           // let window=WindowBuilder::new().build(&event_loop).unwrap();
+        ); 
+        // creates (and leaks) the window!
         let window: &'static WinitWindow = Box::leak(Box::new(
             event_loop
                 .create_window(
                     WindowAttributes::default()
                         .with_inner_size(size)
-                        .with_title(&config.name) //"yarl-2 window"
-                        .with_resizable(!false), // .with_titlebar_transparent(true)
-                                                 //  .with_fullsize_content_view(true),
+                        .with_title(&config.name) 
+                        // I set it up as resizable, but I haven't really spent time on this part
+                        // So it just stretches the original dimensions
+                        .with_resizable(!false), 
+                                                 
                 )
-                .unwrap(), /*   window */
+                .unwrap(),
         ));
+        // Copy-pasted again
         #[cfg(target_arch = "wasm32")]
         {
             // Winit prevents sizing with CSS, so we have to set
@@ -819,7 +846,6 @@ impl<'a> Window<'a> {
             web_sys::window()
                 .and_then(|win| win.document())
                 .and_then(|doc| {
-                    //wasm-example
                     let dst = doc.get_element_by_id("wasm-id-magic")?;
                     let canvas = web_sys::Element::from(window.canvas()?);
                     dst.append_child(&canvas).ok()?;
@@ -828,21 +854,23 @@ impl<'a> Window<'a> {
                 .expect("Couldn't append canvas to document body.");
         }
 
-        let /*mut*/ return_value =
+        let return_value =
             {
-
-                #[cfg(target_arch="wasm32")]//fut
+                // now, since the default wasm32 target does not support `smol`, we must use a different crate to create all the variables, since they are created by our async function
+                #[cfg(target_arch="wasm32")]
                 {
                 wasm_rs_async_executor::single_threaded::block_on(Window::new_inner(config, size, &window, &images))
                 }
 
-                    #[cfg(not(target_arch="wasm32"))]
-                    {
-                    smol::block_on(Window::new_inner(config, size, &window, &images))
-                    }
+                #[cfg(not(target_arch="wasm32"))]
+                {
+                smol::block_on(Window::new_inner(config, size, &window, &images))
+                }
             }
-            ; //, game
-        event_loop.set_control_flow(winit::event_loop::ControlFlow::Wait); //control_flow;//Poll
+            ; 
+        // wait just calls the receive_event when an event is received
+        event_loop.set_control_flow(winit::event_loop::ControlFlow::Wait);
+        // this creates the struct that will run the event loop
         let mut event_loop_runner = EventLoopWrapper {
             game,
             window: return_value,
@@ -853,14 +881,17 @@ impl<'a> Window<'a> {
                 mouse_pressed: false,
             },
         };
-        let _ = event_loop.run_app(&mut event_loop_runner); //return_value
-                                                            //return_value
-        std::process::exit(0) //loop {}
+        // this runs the `event_loop_runner`
+        let _ = event_loop.run_app(&mut event_loop_runner);
+        // this exits the process if we make it out of the run_app
+        std::process::exit(0)
     }
+    /// this function transmits all CPU-side buffers to the GPU
+    /// this is quite an heavy task; it would be a good idea to instead use memory-mapped regions instead of transfering everything
     fn update(&mut self) {
+        // redefine values for convenience
         let cg_width = self.config_chargrid.size.0;
         let cg_height = self.config_chargrid.size.1;
-        //let char_grid_size=wgpu::Ex
         self.queue.write_texture(
             wgpu::ImageCopyTextureBase {
                 texture: &self.char_grid_texture,
@@ -906,19 +937,17 @@ impl<'a> Window<'a> {
             },
             self.char_grid_size,
         );
-        //println!("yay");
-        // handle set writes
         self.queue.write_texture(
             wgpu::ImageCopyTextureBase {
-                texture: &self.set_texture, //bg
+                texture: &self.set_texture,
                 mip_level: 0,
                 origin: wgpu::Origin3d::ZERO,
                 aspect: wgpu::TextureAspect::All,
             },
-            &self.set_buffer, //buffer_colors_bg
+            &self.set_buffer, 
             wgpu::ImageDataLayout {
                 offset: 0,
-                bytes_per_row: Some(cg_width), // * 4
+                bytes_per_row: Some(cg_width), 
                 rows_per_image: Some(cg_height),
             },
             self.char_grid_size,
@@ -929,7 +958,10 @@ impl<'a> Window<'a> {
             bytemuck::cast_slice(&self.instances),
         );
     }
+    // this function renders everything to the screen
     fn draw(&mut self) -> Result<(), wgpu::SurfaceError> {
+        // if *anything* is dirty, we update *everything*
+        // this is inefficient and should be improved
         if self.dirty {
             self.update();
         }
@@ -942,8 +974,10 @@ impl<'a> Window<'a> {
             .create_command_encoder(&wgpu::CommandEncoderDescriptor {
                 label: Some("text rendering command encoder"),
             });
-        // clear black pass
+        // clear render passs
+        // it fills the screen with config's background color
         {
+            // setups the render pass; for a color clear pass, we dont need anything else
             let _render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("clear render pass"),
                 color_attachments: &[Some(wgpu::RenderPassColorAttachment {
@@ -951,10 +985,11 @@ impl<'a> Window<'a> {
                     resolve_target: None,
                     ops: wgpu::Operations {
                         load: wgpu::LoadOp::Clear(wgpu::Color {
-                            r: self.background_color.0 as f64 / 255., //0.,//32
-                            g: self.background_color.1 as f64 / 255., //0.,//0
-                            b: self.background_color.2 as f64 / 255., //0.,//0
-                            a: self.background_color.3 as f64 / 255., //1.//0
+                            // note how we turn it to floats (it was originally an u8 tuple)
+                            r: self.background_color.0 as f64 / 255.,
+                            g: self.background_color.1 as f64 / 255., 
+                            b: self.background_color.2 as f64 / 255.,
+                            a: self.background_color.3 as f64 / 255.,
                         }),
                         store: wgpu::StoreOp::Store,
                     },
@@ -965,7 +1000,9 @@ impl<'a> Window<'a> {
             });
         }
         // render text pass
+        // this renders the  character grid
         {
+            // setup the render pass
             let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("text render pass"),
                 color_attachments: &[Some(wgpu::RenderPassColorAttachment {
@@ -980,13 +1017,16 @@ impl<'a> Window<'a> {
                 timestamp_writes: None,
                 occlusion_query_set: None,
             });
+            // since this render pass needs buffers+a pipeline, we provide them
             render_pass.set_pipeline(&self.render_pipeline);
             render_pass.set_bind_group(0, &self.bind_group, &[]);
             render_pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
-            render_pass.draw(0..3 * 2, 0..1);
+            // then we draw, 0..6 vertices since we have two 3-vertices triangles
+            // note the 0..1, since we don't use instances
+            render_pass.draw(0..6, 0..1);
         }
         // render instances pass
-
+        // this renders the instances / floating characters
         {
             let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("instance render pass"),
@@ -1003,17 +1043,20 @@ impl<'a> Window<'a> {
                 timestamp_writes: None,
                 occlusion_query_set: None,
             });
+            // sets the data
             render_pass.set_pipeline(&self.instance_pipeline);
-            render_pass.set_bind_group(0, &self.bind_group, &[]); //offsets
+            render_pass.set_bind_group(0, &self.bind_group, &[]); 
             render_pass.set_vertex_buffer(0, self.instance_vertices.slice(..));
             render_pass.set_vertex_buffer(1, self.instance_buffer.slice(..));
-            render_pass.draw(0..3 * 2, 0..self.instance_count); //instances
+            // draws the triangles
+            // note that we now use 0..self.instance_count instead of 0..1, since we now have an instance array
+            render_pass.draw(0..6, 0..self.instance_count);
         }
         self.queue.submit(std::iter::once(encoder.finish()));
         output.present();
         Ok(())
     }
-    /// set fg
+    /// sets fg at a point
     pub fn set_fg_at<P>(&mut self, x: P, y: P, fg: Col)
     where
         P: TryInto<usize>,
@@ -1034,9 +1077,8 @@ impl<'a> Window<'a> {
             }
         }
     }
-    /// set "set", which represents the tileset to use
+    /// sets "set", which represents the font to use at a position
     pub fn set_set_at<P>(&mut self, x: P, y: P, value: u8)
-    //fg//fg//Col//fg
     where
         P: TryInto<usize>,
     {
@@ -1050,19 +1092,17 @@ impl<'a> Window<'a> {
                 if x < self.config_chargrid.size.0 as usize
                     && y < self.config_chargrid.size.1 as usize
                 {
-                    // let k = [fg.0, fg.1, fg.2, fg.3];
-                    let index = x + y * self.config_chargrid.size.0 as usize; // * 4//()
+                    let index = x + y * self.config_chargrid.size.0 as usize;
                     let n = self.set_buffer[index]; //&mut//buffer_colors_fg//index..index + 4
                     if n != value {
-                        //&k//k
-                        self.set_buffer[index] = value; //n.copy_from_slice(&k);
+                        self.set_buffer[index] = value;
                         self.dirty = true;
                     }
                 }
             }
         }
     }
-    /// set bg
+    /// sets bg at a point
     pub fn set_bg_at<P>(&mut self, x: P, y: P, bg: Col)
     where
         P: TryInto<usize>,
@@ -1083,7 +1123,7 @@ impl<'a> Window<'a> {
             }
         }
     }
-    /// set a char
+    /// sets the char in the grid at a point
     pub fn set_char_at<P>(&mut self, x: P, y: P, character: char)
     where
         P: TryInto<usize>,
@@ -1105,10 +1145,9 @@ impl<'a> Window<'a> {
             }
         }
     }
-    /// set a char trough its u8 representation
+    /// does the same as set_char_at, but directly does it with an u8 instead of a character (it skips the cp437 conversion)
     /// see codepage_437::CP437_WINGDINGS
     pub fn set_char_at_bin<P>(&mut self, x: P, y: P, character: u8)
-    //char
     where
         P: TryInto<usize>,
     {
@@ -1117,7 +1156,6 @@ impl<'a> Window<'a> {
                 if x < self.config_chargrid.size.0 as usize
                     && y < self.config_chargrid.size.1 as usize
                 {
-                    //  if let Some(char_u8) = codepage_437::CP437_WINGDINGS.encode(character) {
                     let char_u8 = character;
                     let index=x+y*self.config_chargrid.size.0 as usize/*()*/;
                     let n = self.buffer_chars[index];
@@ -1125,7 +1163,6 @@ impl<'a> Window<'a> {
                         self.buffer_chars[index] = char_u8;
                         self.dirty = true;
                     }
-                    // }
                 }
             }
         }
@@ -1138,39 +1175,6 @@ impl<'a> Window<'a> {
         P: TryInto<usize>,
         Text: ToString,
     {
-        /*let k = text.to_string();
-        if let Ok(x) = x.try_into() {
-            if let Ok(y) = y.try_into() {
-                for i in k.chars().enumerate() {
-                    let x = x + i.0;
-                    let character = i.1;
-                    if let Some(char_u8) = codepage_437::CP437_WINGDINGS.encode(character) {
-                        if x < self.config_chargrid.size.0 as usize
-                            && y < self.config_chargrid.size.1 as usize
-                        {
-                            let index=x+y*self.config_chargrid.size.0 as usize/*()*/;
-                            let n = self.buffer_chars[index];
-                            if n != char_u8 {
-                                self.buffer_chars[index] = char_u8;
-                                self.dirty = true;
-                            }
-                            if let Some(fg) = fg {
-                                self.set_fg_at(x, y, fg);
-                            }
-                            if let Some(bg) = bg {
-                                self.set_bg_at(x, y, bg);
-                            }
-                        }
-                    }
-                }
-                /*if x<self.config_chargrid.size.0 as usize&&y<self.config_chargrid.size.1 as usize{
-                    if let Some(char_u8)=codepage_437::CP437_WINGDINGS.encode(character){
-
-                    }
-
-                }*/
-            }
-        }*/
         self.print_at_set(x, y, text, fg, bg, None); //set
     }
     /// prints, will not change anything color-related for the fg if it is none, same for the bg, and also same for the set
@@ -1215,12 +1219,6 @@ impl<'a> Window<'a> {
                         }
                     }
                 }
-                /*if x<self.config_chargrid.size.0 as usize&&y<self.config_chargrid.size.1 as usize{
-                    if let Some(char_u8)=codepage_437::CP437_WINGDINGS.encode(character){
-
-                    }
-
-                }*/
             }
         }
     }
@@ -1252,7 +1250,6 @@ impl<'a> Window<'a> {
         let w = self.config_chargrid.size.0;
         let h = self.config_chargrid.size.1;
         if x + width >= w || y + height >= h {
-            // rip 4 =
             panic!("out of bound! {}> {w} or {} > {h}", x + width, y + height);
         }
         let mut s = Snapshot {
@@ -1265,27 +1262,23 @@ impl<'a> Window<'a> {
         };
         for x in x..x + width {
             for y in y..y + height {
-                //width
                 let idx = (x + y * w) as usize;
-                // fg
                 s.fg.push(self.buffer_colors_fg[idx * 4]);
                 s.fg.push(self.buffer_colors_fg[idx * 4 + 1]);
                 s.fg.push(self.buffer_colors_fg[idx * 4 + 2]);
                 s.fg.push(self.buffer_colors_fg[idx * 4 + 3]);
-                // bg
                 s.bg.push(self.buffer_colors_bg[idx * 4]);
                 s.bg.push(self.buffer_colors_bg[idx * 4 + 1]);
                 s.bg.push(self.buffer_colors_bg[idx * 4 + 2]);
                 s.bg.push(self.buffer_colors_bg[idx * 4 + 3]);
                 s.set.push(self.set_buffer[idx]);
-                s.text.push(self.buffer_chars[idx]); //set
+                s.text.push(self.buffer_chars[idx]);
             }
         }
         s
     }
     /// Write a snapshot at a point
     pub fn apply_snapshot(&mut self, snapshot: &Snapshot, x: i32, y: i32) {
-        //u32//u32
         let bx = x;
         let by = y;
         for x in bx..bx + snapshot.size.0 as i32 {
@@ -1316,15 +1309,17 @@ impl<'a> Window<'a> {
     fn resize(&mut self, new_size: winit::dpi::PhysicalSize<u32>) {
         #[cfg(target_arch = "wasm32")]
         {
+            // resizing on wasm32 crashes; I should investigate that
             return;
         }
+        // current resizing only stretches; it would be nice to keep the proportions constant
         if new_size.width > 0 && new_size.height > 0 {
-            //self.siz = new_size;
             self.surface_conf.width = new_size.width;
             self.surface_conf.height = new_size.height;
             self.surface.configure(&self.device, &self.surface_conf);
         }
     }
+    /// draws a rectangle of values on the grid
     pub fn draw_rect(
         &mut self,
         x: i32,
@@ -1374,6 +1369,7 @@ impl<'a> Window<'a> {
             }
         }
     }
+    /// does the same thing as draw_rect; is a WIP function
     pub fn draw_rect_ex(
         &mut self,
         x: i32,
@@ -1426,12 +1422,8 @@ impl<'a> Window<'a> {
 }
 /// The color type used by this crate
 pub type Col = (u8, u8, u8, u8);
-/*
-pub trait Game{
-    fn tick(&mut self,window:Window<T>);
-    fn render(&mut self,window:Window<T>);
-}
- */
+
+/// The Config type of this crates which describes how everything functions
 pub struct Config {
     /// the size (in characters) of the app
     pub size: (u32, u32),
@@ -1456,33 +1448,35 @@ pub struct Config {
     /// if we should look for srgb color space
     pub srgb: bool,
 }
-impl<'a, T> ApplicationHandler for EventLoopWrapper<T>
-//Window//'a,
+// this is the implementation of the game loop
+impl<'a, T> ApplicationHandler for EventLoopWrapper<T/* <- that T is the game type, provided by the library's user*/>
 where
     T: Yarl2Game,
 {
     fn resumed(&mut self, _event_loop: &winit::event_loop::ActiveEventLoop) {
-        //println!("resumed");
+        // I could handle this later
     }
+    // this is the main function that handles the event loop
 
     fn window_event(
         &mut self,
         event_loop: &winit::event_loop::ActiveEventLoop,
-        _window_id: winit::window::WindowId, //
+        _window_id: winit::window::WindowId,
         event: winit::event::WindowEvent,
     ) {
-        //println!("event {:?}",event_loop.control_flow());
-        //event_loop.set
+        // we first send the event to the game itself, so that it may *do things* if it wants to (and if it thinks my implementation sucks)
         self.game.event(&event, &mut self.window);
+        // we match the event
         match event {
-            winit::event::WindowEvent::Resized(ns) => {
-                self.window.resize(ns);
+            winit::event::WindowEvent::Resized(new_size) => {
+                self.window.resize(new_size);
             }
+            // this event fires when the user requests the window to close, I think
             winit::event::WindowEvent::CloseRequested => {
-                //println!("close requested");
+                // we first call the close function,
                 self.game.close();
+                // then exit the loop
                 event_loop.exit();
-                //std::process::exit(42);
             }
             winit::event::WindowEvent::MouseInput {
                 device_id: _,
@@ -1493,10 +1487,13 @@ where
                     self.keyboard.mouse_pressed = state == ElementState::Pressed;
                 }
             }
+            
             winit::event::WindowEvent::CursorMoved {
                 device_id: _,
                 position,
             } => {
+                // note: this currently breaks on re-size and I should fix that
+                // it's also broken on wasm32
                 let x = position.x - self.window.config_chargrid.padding.0 as f64 / 2.;
                 let y = position.y - self.window.config_chargrid.padding.1 as f64 / 2.;
                 let x = x / self.window.config_chargrid.scale.0 as f64;
@@ -1506,18 +1503,26 @@ where
                 let pos = (x.floor() as i32, y.floor() as i32);
                 self.keyboard.mouse_position = pos;
             }
+            // when we must render the window
             winit::event::WindowEvent::RedrawRequested => {
-                // println!("must draw");
+                // we first call pre_draw, which should be the main update function the user utilizes
                 self.game.pre_draw(&mut self.window, &mut self.keyboard);
+                // we draw
                 let _ = self.window.draw();
+                // we call post_draw (it's mainly intended for time measuring)
                 self.game.post_draw();
+                // we test if we should exit
                 if self.game.should_exit() {
+                    // we call close
                     self.game.close();
+                    // we exit the event loop
                     event_loop.exit();
                     return;
                 }
-                self.window.window.request_redraw(); //;
+                // we request redraw again, so that we have a true loop
+                self.window.window.request_redraw();
             }
+            // handles keyboard input (terribly, I should improve that system)
             winit::event::WindowEvent::KeyboardInput {
                 device_id: _,
                 event,
@@ -1527,19 +1532,15 @@ where
                     if let Some(m) = event.text {
                         let data = m.chars().next().unwrap();
                         if event.state.is_pressed() {
-                            //== winit::event::ElementState::Pressed
-                            //println!("d");
-                            self.game.text_input(data, &mut self.window); //character
-                            self.keyboard.letters.insert(data); //&
+                            self.game.text_input(data, &mut self.window); 
+                            self.keyboard.letters.insert(data);
                         } else {
-                            //println!("wow");
                             self.keyboard.letters.remove(&data);
                         }
                     }
                     if event.state == winit::event::ElementState::Pressed {
-                        self.keyboard.keys.insert(event.physical_key); //&
+                        self.keyboard.keys.insert(event.physical_key); 
                     } else {
-                        //println!("rem");
 
                         self.keyboard.keys.remove(&event.physical_key);
                     }
@@ -1547,31 +1548,25 @@ where
                     if let Some(m) = event.text {
                         let data = m.chars().next().unwrap();
                         if event.state.is_pressed() {
-                            //== winit::event::ElementState::Pressed
-                            self.game.text_input(data, &mut self.window); //character
-                                                                          // self.keyboard.letters.insert(data);//&
+                            self.game.text_input(data, &mut self.window); 
                         } else {
-                            //println!("e");
-                            //self.keyboard.letters.remove(&data);
+                         
                         }
-                        /*else{
-                            self.keyboard.letters.remove(&data);
-                        }*/
+                     
                     }
                 }
             }
-            // winit::event::
             _d_o_n_u_t_ => {
-                //println!("wat dat {:?}",d_)
+                // I used to debug print, but I no longer do so, since printing breaks wasm32 with my current setup
             }
         }
     }
 }
+/// This is the trait that your game struct should implement if you want to work with my library
+/// It's used mostly as a wrapper around winit's ApplicationHandler that provides control over the yarl-2 window & input
 pub trait Yarl2Game {
     /// called before drawing
-    fn pre_draw(&mut self, window: &mut Window<'static>, keyboard: &NiceKeyboard); /*{//mut
-
-                                                                                   }*/
+    fn pre_draw(&mut self, window: &mut Window<'static>, keyboard: &NiceKeyboard); 
     // called after drawing, before calling `should_exit`
     fn post_draw(&mut self) {}
     /// called after pre_draw (after the draw), closes the window if true
@@ -1585,17 +1580,15 @@ pub trait Yarl2Game {
     /// is called when a character is pressed (useful if you want to read text input)
     /// will trigger from repetition
     fn text_input(&mut self, character: char, window: &mut Window) {}
+    /// is called for all events
     fn event(&mut self, _event: &le_winit::event::WindowEvent, _window: &mut Window) {
-        //I
     }
 }
+// this is a default implementation that you can run using `cargo run` that mostly showcases the library and the very broken UI system
 impl Yarl2Game for () {
-    fn pre_draw(&mut self, window: &mut Window<'static>, keyboard: &NiceKeyboard) /**///_
+    fn pre_draw(&mut self, window: &mut Window<'static>, keyboard: &NiceKeyboard) 
     {
         window.clear();
-        // for j in 0..20{
-        // for j in 0..5{
-        //  for i in 0..30{//+j as f32//6.5+//0.5+//i as f32,j as f32//0.,0.
         window.add_instance(InstanceData::new(
             'I',
             WHITE,
@@ -1605,13 +1598,7 @@ impl Yarl2Game for () {
                 keyboard.mouse_position.1 as f32,
             ],
             0,
-        )); //window.add_instance(InstanceData ::new('I',WHITE,BLACK,[0.5,6.5],0));
-            //   }
-            // }
-            //  }
-
-        //B//mut
-        //_
+        )); 
         for x in 0..40 {
             window.print_at(
                 0,
@@ -1621,9 +1608,9 @@ impl Yarl2Game for () {
                 Some((255, 0, 0, 255)),
             ); //None
         }
+        // this is UI stuff; it uses the system in `ui.rs` which is terrible and should never be used
         let data = UIData::default();
         let mut i = ui::ui_context((2, 2), (18, 18), data);
-        //let mut k=false;
         i.add(
             UIBox {
                 fill_style: FillStyle {
@@ -1635,7 +1622,6 @@ impl Yarl2Game for () {
                 ..Default::default()
             },
             |mut d| {
-                //k=true;
                 d.add(
                     UIBox {
                         fill_style: FillStyle {
@@ -1650,7 +1636,7 @@ impl Yarl2Game for () {
                             Label {
                                 foreground_color: Some(BLACK),
                                 background_color: None,
-                                text: "hello from b!".into(), //the inside//a
+                                text: "hello from b!".into(),
                             },
                             |d| d,
                         );
@@ -1687,15 +1673,15 @@ impl Yarl2Game for () {
                                     Label {
                                         foreground_color: Some(BLACK),
                                         background_color: None,
-                                        text: "hello from a!".into(), //the inside
+                                        text: "hello from a!".into(), 
                                     },
                                     |d| d,
                                 );
                                 d.add(
                                     Button {
                                         foreground_color: Some(BLACK),
-                                        background_color: Some(YELLOW), //None
-                                        text: "press me!".into(),       //the inside//hello from a
+                                        background_color: Some(YELLOW), 
+                                        text: "press me!".into(),  
                                         id: "button".to_owned(),
                                         ..Default::default()
                                     },
@@ -1719,10 +1705,9 @@ impl Yarl2Game for () {
                 d
             },
         );
-
-        //println!("{k}");
+        // this makes the ui actually do things
         i.render_and_process(window, keyboard);
-        let data = i.retrieve_data(); //_
+        let data = i.retrieve_data(); 
         if let Some(n) = data.data.get("button") {
             if let UIDataEntry::Boolean(value) = n {
                 if *value {
@@ -1732,15 +1717,16 @@ impl Yarl2Game for () {
         }
         window.set_char_at(keyboard.mouse_position.0, keyboard.mouse_position.1, ':');
         window.set_set_at(keyboard.mouse_position.0, keyboard.mouse_position.1, 1);
-        //char//':'
+
     }
 }
+// this is the wrapper which implements winit's ApplicationHandler
 struct EventLoopWrapper<T: Yarl2Game> {
     game: T,
     window: Window<'static>,
     keyboard: NiceKeyboard,
 }
-/// Provides input
+/// Provides input access to the user without the event() function
 pub struct NiceKeyboard {
     /// The key is in the hashset if the key is pressed
     pub keys: HashSet<WinitKey>,
@@ -1751,27 +1737,25 @@ pub struct NiceKeyboard {
     /// TODO: implement another button than mouse left
     pub mouse_pressed: bool,
 }
-/*
-impl NiceKeyboard{
 
-} */
 pub type WinitKey = PhysicalKey;
+// The default config, uses the font that DEFAULT_FONT_LICENSE refers to
 impl Default for Config {
     fn default() -> Self {
         Config {
-            size: (64, 64), //80, 50 - 10+20-20
+            size: (64, 64),
             name: String::from_str("yarl-2 window").unwrap(),
-            dpi: false, // !//default()
+            dpi: false,
             font: vec![
                 Font::default(),
                 Font::Binary(include_bytes!("../comic_sans_mono_cp437.png")),
-            ], //Binary(include_bytes!("../comic_sans_mono_cp437.png"))
+            ],
             background_color: (255, 255, 255, 255), //Vec
             padding: (8 * 2, 8 * 2),
             scale: (2 / 2, 2 / 2),
             max_instances: 128,
             srgb: true,
-        } //; //sans_//todo!()
+        } 
     }
 }
 /// Runs the game
@@ -1786,7 +1770,7 @@ pub const DEFAULT_FONT_LICENSE: &str = include_str!("../font_license.txt");
 pub use winit::keyboard::PhysicalKey as TheKeyTypeFromWinit;
 //pub use winit::keyboard::PhysicalKey;
 pub use winit::keyboard::KeyCode as TheKeyCodeTypeFromWinit;
-/// an instance for instanced rendering of chars, unaligned to the grid
+/// an instance for instanced rendering of chars, unaligned to the grid (floating characters!)
 /// recommended to be used with the provided constructor
 #[repr(C)]
 #[derive(Clone, Copy)]
@@ -1802,6 +1786,7 @@ pub struct InstanceData {
     pub bg: Col,
 }
 impl InstanceData {
+    /// creates the instance, calls encode by itself instead of you having to call it manually when entering each field by yourself in InstanceData {...} format
     pub fn new(ch: char, fg: Col, bg: Col, position: [f32; 2], set: u8) -> Self {
         Self {
             set_char: [set, codepage_437::CP437_WINGDINGS.encode(ch).unwrap()],
@@ -1811,6 +1796,7 @@ impl InstanceData {
         }
     }
 }
+/// The layout of the instances, copy-pasted again from the wgpu tutorial
 const INSTANCE_LAYOUT: wgpu::VertexBufferLayout =
     /* more copy-pasting :3 */ /* moare copy-pasting :> */
     wgpu::VertexBufferLayout {
@@ -1854,15 +1840,15 @@ pub struct Snapshot {
     pub set: Vec<u8>,
     pub text: Vec<u8>, //ch
 }
+/// Can be used to pretty-print text fragments with different colors, and also implements semi-working text wrapping
 pub struct TextBuilder {
-    //pub pos:(i32,i32),
-    //pub width_end:i32,
     pub segments: Vec<TextSegment>,
     fg: Col,
     bg: Col,
     set: u8,
 }
 impl TextBuilder {
+    /// returns the len
     pub fn len(&self) -> usize {
         let mut accumulator = 0;
         for i in &self.segments {
@@ -1870,22 +1856,20 @@ impl TextBuilder {
         }
         accumulator
     }
+    /// creates it
     pub fn create() -> Self {
-        //pos:(i32,i32),width_end:i32
         Self {
-            // pos,
-            // width_end,
             segments: Vec::new(),
             fg: WHITE,
             bg: BLACK,
             set: 0,
         }
     }
+    /// pushes text onto it
     pub fn text<T>(mut self, text: T) -> Self
     where
         T: ToString,
     {
-        //::
         self.segments.push(TextSegment {
             text: text.to_string(),
             fg: self.fg,
@@ -1894,18 +1878,25 @@ impl TextBuilder {
         });
         self
     }
+    /// sets the fg that will be used in the next call to text()
     pub fn fg(mut self, fg: Col) -> Self {
         self.fg = fg;
         self
     }
+    /// sets the bg that will be used in the next call to text()
+
     pub fn bg(mut self, bg: Col) -> Self {
         self.bg = bg;
         self
     }
+    /// sets the set/font that will be used in the next call to text()
+
     pub fn set(mut self, set: u8) -> Self {
         self.set = set;
         self
     }
+    /// prints with a darkening factor (col_sub)
+    /// is a wrapper on print_sub_cutoff
     pub fn print_sub(
         &self,
         window: &mut Window,
@@ -1916,6 +1907,7 @@ impl TextBuilder {
     ) -> (i32, i32) {
         self.print_sub_cutoff(window, pos, width_end, col_sub, return_x, None)
     }
+    /// prints with a darkening faction and a cutoff point on the y axis
     pub fn print_sub_cutoff(
         &self,
         window: &mut Window,
@@ -1963,6 +1955,9 @@ impl TextBuilder {
         }
         (x, y)
     }
+    /// prints with wrapping
+    /// is a wrapper on print_sub
+    /// the text begins at pos and will return to return_x when it bypasses width_end on the x axis
     pub fn print(
         &self,
         window: &mut Window,
@@ -1970,20 +1965,24 @@ impl TextBuilder {
         width_end: i32,
         return_x: i32,
     ) -> (i32, i32) {
-        //_sub//,col_sub:Col
-        self.print_sub(window, pos, width_end, TRANSPARENT, return_x) //col_sub
+        self.print_sub(window, pos, width_end, TRANSPARENT, return_x) 
     }
 }
+/// A text segment used by TextBuilder
 pub struct TextSegment {
     pub text: String,
     pub fg: Col,
     pub bg: Col,
     pub set: u8,
 }
+// Public use so that one may properly receive events
 pub use winit as le_winit;
+/// Converts a char to its cp437 u8 representation
+/// Will panic if the char is not cp437
 pub fn ch_to_u8(ch: char) -> u8 {
     codepage_437::CP437_WINGDINGS.encode(ch).unwrap()
 }
+/// Convers an u8 to a char via cp437
 pub fn u8_to_ch(u: u8) -> char {
-    codepage_437::CP437_WINGDINGS.decode(u) //.unwrap()
+    codepage_437::CP437_WINGDINGS.decode(u)
 }
