@@ -1,0 +1,59 @@
+struct VertexInput{
+    @location(0) position: vec3<f32>,
+    @location(1) uv: vec2<f32>,
+}
+struct InstanceInput{
+@location(2)  position:vec2<f32>,
+@location(3) set_char:vec2<u32>,
+@location(4) fg:vec4<f32>,
+@location(5) bg:vec4<f32>,
+}
+struct VertexOutput{
+    @builtin(position) pos:vec4<f32>,
+    @location(0) uv:vec2<f32>,
+    @location(1) bg:vec4<f32>,//ƒ wweeeeww!//ƒ
+    @location(2) fg:vec4<f32>,
+    @location(3) ch:u32,
+    @location(4) dset:u32
+}
+@vertex
+fn vs_main(
+model:VertexInput,
+instance:InstanceInput)->VertexOutput{
+    var output:VertexOutput;
+//0.,0.//1//-//+//1//0.5///f32($SCALE_FACTOR)//let//*vec2<f32>(0.+1.,-1.)+//-//-//+0.5//-0.5//+//0.-0.5//-1.//1
+    let pos=(((instance.position*vec2<f32>(1.,-1.)+vec2<f32>(model.position.x,model.position.y)+vec2<f32>(0.,0.-2. /* change this to -2/-1 to fix the padding bug on 8, 8*/))*vec2<f32>(f32($C_WIDTH),f32($C_HEIGHT))+vec2<f32>(f32($PADDING_X)/2.,f32($PADDING_Y)/2.)))*vec2<f32>(f32($SCALE_X),f32($SCALE_Y))/vec2<f32>(f32($SC_WIDTH),f32($SC_HEIGHT))*2-vec2<f32/*ƒ*/>(1.,0.-1.);//;//*vec2<f32>(1.,$SCALE_FACTOR)//-vec2<f32>(0.5,-0.5*2.);//-vec2<f32>(1.,-1.);//;//
+    output.pos=vec4<f32>(pos,0.,1.);//0
+    output.uv=model.uv;
+    output.dset=instance.set_char.x;
+    output.ch=instance.set_char.y;
+    output.bg=instance.bg;
+    output.fg=instance.fg;
+    return output;
+}
+@group(0) @binding(0)
+var t_diffuse: texture_2d_array<f32>;
+@group(0) @binding(1)
+var s_diffuse: sampler;
+@group(0) @binding(2)
+var t_index: texture_2d<f32>;
+@group(0) @binding(3)
+var t_color_fg: texture_2d<f32>;
+@group(0) @binding(4)
+var t_color_bg: texture_2d<f32>;
+@group(0) @binding(5)
+var t_set: texture_2d<f32>;
+@fragment
+fn fs_main(
+in:VertexOutput)->@location(0) vec4<f32>{
+let index=f32(in.ch);
+let y=floor(index/16.)/16.;
+let k=in.uv;
+let sert_i=in.dset;
+    let x=f32(u32(index)%16)/16.;
+
+    let uv=k/16.+vec2<f32>(x,y);//#uv//3
+    let col_char=textureSample(t_diffuse,s_diffuse,vec2<f32>(uv.x,uv.y),sert_i);//k-floor(k)+vec2<f32>(x,y)//,0.//0//*//var
+    let col=mix(in.bg,col_char*in.fg,col_char.a*in.fg.a);
+return col;//vec4<f32>(1.,1.,1.,1.);//COLOR=//_char
+}

@@ -1,0 +1,62 @@
+struct VertexInput{
+    @location(0) position: vec3<f32>,
+    @location(1) uv: vec2<f32>,
+}
+struct VertexOutput{
+    @builtin(position) clip_position: vec4<f32>,
+    @location(0) uv: vec2<f32>,//vert_pos//3
+}
+@vertex
+fn vs_main(//@builtin(vertex_index)
+     in_vertex: VertexInput) -> VertexOutput
+    {
+       // var k:VertexOutput;
+       // k.clip_position=vec4<f32>(0.,0.,0.,0.);
+       // return k;
+       var out: VertexOutput;
+
+    /*let x = f32(in_vertex_index%2)*4.-2.;
+    let y = f32(in_vertex_index/2)*4.-2.;
+    out.clip_position = vec4<f32>(x, y, 0.0, 1.0);
+    out.vert_pos = out.clip_position.xyz;*/
+
+    out.uv=in_vertex.uv;
+    out.clip_position=vec4<f32>(in_vertex.position,1.0);
+    return out;
+    }
+@group(0) @binding(0)
+var t_diffuse: texture_2d_array<f32>;
+@group(0) @binding(1)
+var s_diffuse: sampler;
+@group(0) @binding(2)
+var t_index: texture_2d<f32>;
+@group(0) @binding(3)
+var t_color_fg: texture_2d<f32>;
+@group(0) @binding(4)
+var t_color_bg: texture_2d<f32>;
+@group(0) @binding(5)
+var t_set: texture_2d<f32>;
+@fragment
+fn fs_main(in:VertexOutput) -> @location(0) vec4<f32>{///
+    let char_grid=$CHARGRID;///vec2<f32>($SCALE_FACTOR_X,$SCALE_FACTOR_Y)
+   // let uv=floor(pos_grid);
+    let pos_grid=in.uv*char_grid;
+    let k=pos_grid-floor(pos_grid);//in.uv*vec2<f32>($SCALE_FACTOR_X,$SCALE_FACTOR_Y);
+//floor(pos_grid)/char_grid/vec2<f32>(1.,1.)
+    var sert_i=u32(textureSample(t_set,s_diffuse,in.uv).r*255.);
+    let index=textureSample(t_index,s_diffuse,in.uv).x*255.;//*vec2<f32>(1./$SCALE_FACTOR_X,1.*$SCALE_FACTOR_X)//vec2<f32>(in.uv.x,in.uv.y)
+    let col_fg=textureSample(t_color_fg,s_diffuse,in.uv);
+    let col_bg=textureSample(t_color_bg,s_diffuse,in.uv);
+//in.uv
+    let y=floor(index/16.)/16.;
+    let x=f32(u32(index)%16)/16.;
+
+    let uv=k/16.+vec2<f32>(x,y);//#uv//3
+    var col_char=textureSample(t_diffuse,s_diffuse,vec2<f32>(uv.x,uv.y),sert_i);//k-floor(k)+vec2<f32>(x,y)//,0.//0
+    //col_char;//*=col.a;//vec4(x,y,0.,1.)*//1.-
+    //col_char.a=1.;//.a*vec4(1.,1.,1.,1.)
+    var col=mix(col_bg,col_char*col_fg,col_char.a);
+    col.a=col_char.a+col_bg.a;//max(col_char.a,col_bg.a);//+vec4(f32(sert_i))
+    return col;//vec4<f32>(uv,1.,1.);//col;//vec4<f32>(uv,1.,1.);//vec4<f32>(uv,1.,1.);//col;//vec4<f32>(k,1.,1.);//pos_grid;//uv;//col;//vec4(floor(pos_grid)/char_grid,1.,1.);//col+vec4(uv,1.,1.);//vec4(uv,1.,1.);//col;//vec4(k.x,k.y,1.,1.);//vec4<f32>(0.,0.,1.,1.);//vert_pos.yz
+
+}
