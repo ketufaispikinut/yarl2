@@ -1,3 +1,4 @@
+//! /!\ Nobody should use this module; it is terrible /!\
 use std::collections::HashMap;
 
 use crate::{Col, NiceKeyboard, Window};
